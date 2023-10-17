@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
-go generate
-go build -o oomeventer .
+go generate ./...
+go build -o oomeventer ./cmd/oomeventer/

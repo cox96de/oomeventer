@@ -1,4 +1,4 @@
-module oomeventer
+module github.com/cox96de/oomeventer
 
 go 1.20
 

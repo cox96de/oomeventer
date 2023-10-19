@@ -4,11 +4,10 @@
 #include "bpf_helpers.h"
 #include "bpf_tracing.h"
 #include <bpf_core_read.h>
-
 char _license[] SEC("license") = "GPL";
 
 struct event {
-	u32 pid;
+	pid_t pid;
 	u8 comm[80];
 	u8 cgroup_name[128];
 };
@@ -28,12 +27,14 @@ int kprobe_oom_kill_process(struct pt_regs *ctx) {
 
 	task_info = bpf_ringbuf_reserve(&events, sizeof(struct event), 0);
 	if (!task_info) {
+		char a[]="BPF for oom_kill_process: no memory\n";
+		bpf_trace_printk(a, sizeof(a));
 		return 0;
 	}
 	struct task_struct *p;
         bpf_probe_read(&p, sizeof(p), &oc->chosen);
-	bpf_probe_read(&task_info->pid, sizeof(task_info->pid), &p->pid);
-	bpf_probe_read(&task_info->comm, sizeof(task_info->comm), (void *)&p->comm);
+	bpf_core_read(&task_info->pid, sizeof(task_info->pid), &p->pid);
+	bpf_core_read(&task_info->comm, sizeof(task_info->comm), (void *)&p->comm);
 	const char *cname=BPF_CORE_READ(p,cgroups, subsys[0], cgroup, kn, name);
 	bpf_core_read_str(&task_info->cgroup_name, sizeof(task_info->cgroup_name), cname);
 	bpf_ringbuf_submit(task_info, 0);

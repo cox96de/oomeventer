@@ -8,6 +8,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"io"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 	"log"
 	"net"
@@ -27,6 +30,7 @@ func main() {
 	flag.StringVar(&criAddr, "cri-addr", "/run/containerd/containerd.sock", "cri address")
 	flag.Parse()
 	var err error
+	clientset := getKubernetesClient("")
 	timer := time.NewTimer(time.Second)
 	ctx := context.Background()
 	criClient, err := NewCRIClient(ctx, criAddr)
@@ -87,8 +91,13 @@ func main() {
 			}
 			namespace := status.Status.Labels["io.kubernetes.pod.namespace"]
 			podUID := status.Status.Labels["io.kubernetes.pod.uid"]
+			podName := status.Status.Labels["io.kubernetes.pod.name"]
 			containerName := status.Status.Labels["io.kubernetes.container.name"]
-			log.Printf("namespace: %s, pod uid: %s, container name: %s", namespace, podUID, containerName)
+			log.Printf("namespace: %s, pod uid: %s,pod name:%s, container name: %s", namespace, podUID, podName,
+				containerName)
+			if err = kube.SendOOMEvent(clientset, proc, namespace, podName); err != nil {
+				log.Printf("failed to send oom event: %+v", err)
+			}
 		}
 		signals <- syscall.SIGTERM
 	}()
@@ -110,4 +119,39 @@ func NewCRIClient(ctx context.Context, addr string) (runtimeapi.RuntimeServiceCl
 	}
 	runtimeServiceClient := runtimeapi.NewRuntimeServiceClient(conn)
 	return runtimeServiceClient, nil
+}
+
+func getKubernetesClient(kubeConfigPath string) kubernetes.Interface {
+	var (
+		restConfig *rest.Config
+		err        error
+	)
+	if len(kubeConfigPath) > 0 {
+		// Use the given kube config.
+		log.Printf("loading kube config from [%s]", kubeConfigPath)
+		b, err := os.ReadFile(kubeConfigPath)
+		if err != nil {
+			log.Fatalf("failed to read kube config [%s]: %v", kubeConfigPath, err)
+		}
+		config, err := clientcmd.NewClientConfigFromBytes(b)
+		if err != nil {
+			log.Fatalf("failed to parse kube config [%s]: %v", kubeConfigPath, err)
+		}
+		restConfig, err = config.ClientConfig()
+		if err != nil {
+			log.Fatalf("failed to get rest config from kube config [%s]: %v", kubeConfigPath, err)
+		}
+	} else {
+		// Use the in-cluster config.
+		log.Printf("loading kube config from in-cluster files")
+		restConfig, err = rest.InClusterConfig()
+		if err != nil {
+			log.Fatalf("failed to get in-cluster config: %v", err)
+		}
+	}
+	client, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		log.Fatalf("failed to create rest client: %v", err)
+	}
+	return client
 }

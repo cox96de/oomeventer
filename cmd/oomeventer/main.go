@@ -1,10 +1,16 @@
 package main
 
 import (
+	"context"
 	"errors"
+	"flag"
 	"fmt"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"io"
+	runtimeapi "k8s.io/cri-api/pkg/apis/runtime/v1"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"strings"
@@ -17,8 +23,16 @@ import (
 )
 
 func main() {
+	var criAddr string
+	flag.StringVar(&criAddr, "cri-addr", "/run/containerd/containerd.sock", "cri address")
+	flag.Parse()
 	var err error
 	timer := time.NewTimer(time.Second)
+	ctx := context.Background()
+	criClient, err := NewCRIClient(ctx, criAddr)
+	if err != nil {
+		log.Fatalf("failed to create cri client: %s", err)
+	}
 	defer timer.Stop()
 	log.Println("Waiting for events..")
 	signals := make(chan os.Signal, 1)
@@ -64,8 +78,36 @@ func main() {
 			}
 			containerID := kube.ExtractContainerIDFromCgroupPath(cgrouPath)
 			log.Printf("container id: %s", containerID)
+			status, err := criClient.ContainerStatus(ctx, &runtimeapi.ContainerStatusRequest{
+				ContainerId: containerID,
+			})
+			if err != nil {
+				log.Printf("failed to get container status: %+v", err)
+				continue
+			}
+			namespace := status.Status.Labels["io.kubernetes.pod.namespace"]
+			podUID := status.Status.Labels["io.kubernetes.pod.uid"]
+			containerName := status.Status.Labels["io.kubernetes.container.name"]
+			log.Printf("namespace: %s, pod uid: %s, container name: %s", namespace, podUID, containerName)
 		}
 		signals <- syscall.SIGTERM
 	}()
 	<-signals
+}
+
+func NewCRIClient(ctx context.Context, addr string) (runtimeapi.RuntimeServiceClient, error) {
+	dialer := func(ctx context.Context, addr string) (net.Conn, error) {
+		return net.Dial("unix", addr)
+	}
+	var dialOpts []grpc.DialOption
+	dialOpts = append(dialOpts,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithContextDialer(dialer),
+	)
+	conn, err := grpc.DialContext(ctx, addr, dialOpts...)
+	if err != nil {
+		return nil, err
+	}
+	runtimeServiceClient := runtimeapi.NewRuntimeServiceClient(conn)
+	return runtimeServiceClient, nil
 }

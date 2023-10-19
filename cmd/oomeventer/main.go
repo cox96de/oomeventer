@@ -38,6 +38,23 @@ func main() {
 			}
 			log.Printf("pid: %d, filepath: %s, cgroup: %s", e.Pid, unix.ByteSliceToString(e.Comm[:]),
 				unix.ByteSliceToString(e.CgroupName[:]))
+			proc := &kube.Process{
+				PID:        e.Pid,
+				CgroupName: unix.ByteSliceToString(e.CgroupName[:]),
+			}
+			cmdlineContent, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", e.Pid))
+			if err != nil {
+				log.Printf("failed to read cmdline: %+v", err)
+			} else {
+				proc.CmdLine = strings.Split(string(cmdlineContent), "\x00")
+			}
+			environContent, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", e.Pid))
+			if err != nil {
+				log.Printf("failed to read environ: %+v", err)
+			} else {
+				proc.Environ = strings.Split(string(environContent), "\x00")
+			}
+			log.Printf("oom process: %+v", proc)
 		}
 		signals <- syscall.SIGTERM
 	}()

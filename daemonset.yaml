@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: oomeventer
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: oomeventer
+  namespace: oomeventer
+  labels:
+    app: oomeventer
+spec:
+  selector:
+    matchLabels:
+      app: oomeventer
+  template:
+    metadata:
+      name: oomeventer
+      labels:
+        app: oomeventer
+    spec:
+      hostPID: true
+      containers:
+        - name: oomeventer
+          image: hub.byted.org/actions/oomeventer
+          imagePullPolicy: Always
+          securityContext:
+            privileged: true
+      restartPolicy: Always
+
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: test
+  namespace: oomeventer
+  labels:
+    app: test
+spec:
+  selector:
+    matchLabels:
+      app: test
+  template:
+    metadata:
+      name: test
+      labels:
+        app: test
+    spec:
+      containers:
+        - name: test
+          resources:
+            limits:
+              memory: 100Mi
+              cpu: "1"
+          command:
+            - tail
+            - -f
+            - /dev/null
+          image: hub.byted.org/codebase/ci_go_1_20
+          imagePullPolicy: Always
+      restartPolicy: Always

@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: oomeventer
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: oomeventer
+  template:
+    metadata:
+      labels:
+        app: oomeventer
+    spec:
+      serviceAccountName: oomeventer-sa
+      tolerations:
+        - key: "node.kubernetes.io/disk-pressure"
+          operator: "Exists"
+          effect: "NoExecute"
+      containers:
+        - name: oomeventer
+          image: oomeventer
+          imagePullPolicy: Always
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: run
+              mountPath: /run
+            - name: proc
+              mountPath: /proc
+      volumes:
+        - name: run
+          hostPath:
+            path: /run
+            type: Directory
+        - name: proc
+          hostPath:
+            path: /proc
+            type: Directory
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: oomeventer-sa
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: oomeventer-cluster-role
+rules:
+  - apiGroups: [ "" ]
+    resources: [ "events" ]
+    verbs: [ "create", "patch", "update" ]
+  - apiGroups: [ "" ]
+    resources: [ "pods" ]
+    verbs: [ "get", "list", "watch" ]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: oomeventer-cluster-rolebinding
+subjects:
+  - kind: ServiceAccount
+    name: oomeventer-sa
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: oomeventer-cluster-role
+  apiGroup: rbac.authorization.k8s.io

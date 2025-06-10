@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: oomeventer-test
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: oomeventer-test
+  template:
+    metadata:
+      labels:
+        app: oomeventer-test
+    spec:
+      tolerations:
+        - key: "node.kubernetes.io/disk-pressure"
+          operator: "Exists"
+          effect: "NoExecute"
+      containers:
+        - name: oomeventer
+          image: oomeventer-test
+          resources:
+            requests:
+              memory: "20Mi"
+            limits:
+              memory: "20Mi"

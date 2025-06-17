@@ -1,5 +1,15 @@
 # oomeventer
 
+## ⚠️ Important Notice
+
+Starting from Kubernetes 1.28, when an OOM (Out Of Memory) event occurs inside a container, the default behavior is to
+restart the entire Pod. In Kubernetes 1.32 and later, a new configuration option `singleProcessOOMKill` was introduced,
+allowing you to control this behavior. With `singleProcessOOMKill` enabled, only the container that experienced the OOM
+will be restarted, instead of the whole Pod. Please refer to the official Kubernetes documentation for details on
+configuring `singleProcessOOMKill` to avoid unnecessary Pod restarts.
+
+singleProcessOOMKill: https://kubernetes.io/docs/reference/config-api/kubelet-config.v1beta1/#kubelet-config-k8s-io-v1beta1-KubeletConfiguration
+
 ## Project Overview
 
 `oomeventer` is a Kubernetes OOM (Out Of Memory) event monitoring and reporting tool based on eBPF. It captures OOM
